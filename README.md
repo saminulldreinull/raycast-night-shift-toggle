@@ -1,12 +1,22 @@
-# Night Shift Toggle – Raycast Script Command
+# macOS System Toggles – Raycast Script Commands
 
-Toggled macOS Night Shift per Raycast-Hotkey ein und aus.
+Raycast Script Commands für schnelle macOS-System-Toggles:
+
+- Night Shift
+- Caffeinate Display (`caffeinate -d`) mit Menüleistenstatus
+- Low Power Mode mit Menüleistenstatus
 
 ## Architektur
 
 ```
 Raycast → toggle-night-shift.sh → nightshift-toggle (Swift Binary)
                                  ↘ toggle-night-shift-fallback.applescript (Fallback)
+
+Raycast → toggle-caffeinate-display.sh → CaffeinateDisplayMenu.app
+                                      ↘ caffeinate -d
+
+Raycast → toggle-low-power-mode.sh → pmset -a lowpowermode 0/1
+                                  ↘ LowPowerModeMenu.app
 ```
 
 **Primärer Ansatz:** Ein kompiliertes Swift-Binary nutzt die private `CoreBrightness`-Framework-API (`CBBlueLightClient`), um Night Shift direkt und sofort zu toggeln – ohne UI-Automation, ohne Drittanbieter-Tools.
@@ -32,6 +42,13 @@ Die CoreBrightness-API ist der beste Kompromiss aus Zuverlässigkeit und Wartbar
 | `nightshift-toggle` | Kompiliertes Binary (wird automatisch erzeugt) |
 | `toggle-night-shift-fallback.applescript` | Fallback via UI-Automation |
 | `install-raycast-night-shift.sh` | Installations- und Kompilierungsskript |
+| `toggle-caffeinate-display.sh` | Raycast Script Command für `caffeinate -d` |
+| `caffeinate-display-menu.swift` | Menüleisten-Helper für Caffeinate |
+| `CaffeinateDisplayMenu.app/Contents/Info.plist` | App-Bundle-Metadaten für den Caffeinate-Helper |
+| `toggle-low-power-mode.sh` | Raycast Script Command für Low Power Mode |
+| `low-power-mode-menu.swift` | Menüleisten-Helper für Low Power Mode |
+| `LowPowerModeMenu.app/Contents/Info.plist` | App-Bundle-Metadaten für den Low-Power-Helper |
+| `install-low-power-mode-passwordless.sh` | Einmaliges Setup für passwortloses Low-Power-Toggling |
 
 ## Installation
 
@@ -53,10 +70,28 @@ swiftc nightshift-toggle.swift -o nightshift-toggle -O
 
 # 3. Skripte ausführbar machen
 chmod +x toggle-night-shift.sh nightshift-toggle install-raycast-night-shift.sh
+chmod +x toggle-caffeinate-display.sh toggle-low-power-mode.sh install-low-power-mode-passwordless.sh
 
 # 4. Testen
 ./nightshift-toggle        # Direkt
 ./toggle-night-shift.sh    # Via Raycast-Wrapper
+./toggle-caffeinate-display.sh
+./toggle-low-power-mode.sh
+```
+
+### Low Power Mode ohne Passwortdialog
+
+macOS erlaubt `pmset -a lowpowermode 0/1` nur als root. Damit der Raycast-Hotkey nicht jedes Mal nach dem Admin-Passwort fragt, installiere einmalig die eng begrenzte sudoers-Regel:
+
+```bash
+~/raycast-scripts/install-low-power-mode-passwordless.sh
+```
+
+Die Regel erlaubt nur diese zwei Befehle ohne Passwort:
+
+```bash
+/usr/bin/pmset -a lowpowermode 0
+/usr/bin/pmset -a lowpowermode 1
 ```
 
 ## Raycast einrichten
@@ -75,8 +110,11 @@ chmod +x toggle-night-shift.sh nightshift-toggle install-raycast-night-shift.sh
 ### Command finden und testen
 
 1. Raycast öffnen
-2. **„Toggle Night Shift"** eingeben
-3. Enter drücken → Night Shift wird getoggelt
+2. Einen Command suchen:
+   - **„Toggle Night Shift"**
+   - **„Toggle Caffeinate Display"**
+   - **„Toggle Low Power Mode"**
+3. Enter drücken → der jeweilige Zustand wird getoggelt
 
 ### Hotkey zuweisen
 
@@ -85,6 +123,26 @@ chmod +x toggle-night-shift.sh nightshift-toggle install-raycast-night-shift.sh
 3. **„Assign Hotkey"** wählen
 4. Gewünschte Tastenkombination drücken (z.B. `⌃⌥N`)
 5. Fertig – der Hotkey funktioniert jetzt systemweit
+
+## Caffeinate Display
+
+`toggle-caffeinate-display.sh` startet und stoppt `caffeinate -d`, damit das Display wach bleibt.
+
+- ON: volle Tasse in der Menüleiste, `caffeinate -d` läuft
+- OFF: leere/abgeschwächte Tasse bleibt in der Menüleiste, `caffeinate -d` ist gestoppt
+- Klick auf das Menüleisten-Icon zeigt **Turn On** oder **Turn Off**
+
+Der Helper wird bei Bedarf automatisch aus `caffeinate-display-menu.swift` kompiliert.
+
+## Low Power Mode
+
+`toggle-low-power-mode.sh` toggelt macOS Low Power Mode über `pmset`.
+
+- ON: Low Power Mode aktiv, Batterie-Icon in der Menüleiste
+- OFF: Low Power Mode aus, Menüleisten-Helper beendet
+- Der Menüleisten-Helper beendet sich automatisch, wenn Low Power Mode extern ausgeschaltet wird
+
+Voraussetzung für Hotkey-Nutzung ohne Passwortdialog ist das einmalige Setup mit `install-low-power-mode-passwordless.sh`.
 
 ## Berechtigungen
 
@@ -162,6 +220,20 @@ rm -f ~/raycast-scripts/toggle-night-shift.sh
 rm -f ~/raycast-scripts/toggle-night-shift-fallback.applescript
 rm -f ~/raycast-scripts/install-raycast-night-shift.sh
 rm -f ~/raycast-scripts/README-Night-Shift-Raycast.md
+rm -f ~/raycast-scripts/toggle-caffeinate-display.sh
+rm -f ~/raycast-scripts/caffeinate-display-menu.swift
+rm -rf ~/raycast-scripts/CaffeinateDisplayMenu.app
+rm -f ~/raycast-scripts/toggle-low-power-mode.sh
+rm -f ~/raycast-scripts/low-power-mode-menu.swift
+rm -rf ~/raycast-scripts/LowPowerModeMenu.app
+rm -f ~/raycast-scripts/install-low-power-mode-passwordless.sh
 ```
 
 Danach in Raycast den Script-Ordner entfernen (falls gewünscht).
+
+Die Low-Power-sudoers-Regel kann so entfernt werden:
+
+```bash
+sudo rm -f /private/etc/sudoers.d/raycast-low-power-mode
+sudo visudo -cf /private/etc/sudoers
+```
